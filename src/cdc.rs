@@ -26,6 +26,9 @@ pub struct UsbCdcAcmStreamHandler {
 pub const CDC_ACM_SUBCLASS: u8 = 0x02;
 
 impl UsbCdcAcmStreamHandler {
+    /**
+     * Create new UsbCdcAcmStreamHandler
+     */
     pub fn new() -> io::Result<Self> {
         let (buffer, stream) = SerialBuffer::new();
 
@@ -35,6 +38,9 @@ impl UsbCdcAcmStreamHandler {
         });
     }
 
+    /**
+     * Get the stream to read and write to the serial bus.
+     */
     pub fn get_stream(&self) -> Arc<Mutex<DuplexStream>> {
         return self.stream.clone();
     }
@@ -88,10 +94,10 @@ impl UsbInterfaceHandler for UsbCdcAcmStreamHandler {
                 let bor = self.buffer.get_rx_buffer();
                 let mut rx = bor.lock().await;
                 rx.extend(req);
-                self.buffer.notify_tx();
+                self.buffer.notify_rx();
                 return Ok(vec![]);
             } else {
-                let mut buffers = [0 as u8;512];
+                let mut buffers = [0 as u8; 512];
                 let bor = self.buffer.get_tx_buffer();
                 let mut tx = bor.lock().await;
 
@@ -99,8 +105,7 @@ impl UsbInterfaceHandler for UsbCdcAcmStreamHandler {
                 if len > 0 {
                     tx.copy_to_slice(&mut buffers[..len]);
                     return Ok(buffers[..len].to_vec());
-                }
-                else {
+                } else {
                     return Ok(vec![]);
                 }
             }

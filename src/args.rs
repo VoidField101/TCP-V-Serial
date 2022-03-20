@@ -17,8 +17,10 @@ pub struct Args {
 
 
     #[clap(short, long, parse(try_from_str))]
+    /// Address for TCP Socket to connect to (bind address when listen is set)
     pub address: SocketAddr,
 
     #[clap(short, long)]
+    /// Listen to TCP socket instead of connecting
     pub listen: bool
 }

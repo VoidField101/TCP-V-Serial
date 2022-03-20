@@ -13,6 +13,10 @@ use crate::cdc;
 
 pub type UsbHandlerBox = Arc<tokio::sync::Mutex<Box<dyn UsbInterfaceHandler + Send>>>;
 
+/**
+ * Create a new UsbDevice for virtual serial port.
+ * Returns both the device and the handler (handler required for reading and writing)
+ */
 pub async fn new_device(index:u32) -> io::Result<(UsbDevice, UsbHandlerBox)> {
     let handler = Arc::new(tokio::sync::Mutex::new(Box::new(cdc::UsbCdcAcmStreamHandler::new()?) as Box<dyn usbip::UsbInterfaceHandler + Send>));
     
@@ -30,7 +34,10 @@ pub async fn new_device(index:u32) -> io::Result<(UsbDevice, UsbHandlerBox)> {
     return Ok((device, handler));
 }
 
-
+/**
+ * Runs the UsbIp server and starts relaying information between the tcp socket and usb handler.
+ * UsbHandlerBox needs to contain a UsbCdcAcmStreamHandler, task will panic otherwise
+ */
 pub async fn run_usbip(device: (UsbDevice, UsbHandlerBox), addr: SocketAddr) -> io::Result<()>{
     //Might extend to multiple devices later
     let server = UsbIpServer::new_simulated(vec![device.0]);

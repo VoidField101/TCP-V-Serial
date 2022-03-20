@@ -14,7 +14,11 @@ pub type SerialWrite = Arc<Mutex<WriteHalf<DuplexStream>>>;
 pub type SerialRead = Arc<Mutex<ReadHalf<DuplexStream>>>;
 pub type SerialBufferVec = Arc<Mutex<VecDeque<u8>>>;
 
-
+/**
+ * A buffer for a serial connection.
+ * Relays data from the internal receive character buffer to the stream.
+ * Also relays data from the stream to the interal transmit buffer.
+ */
 #[derive(Clone)]
 pub struct SerialBuffer {
     tx_pair: (SerialRead, SerialWrite),
@@ -25,6 +29,10 @@ pub struct SerialBuffer {
 
 impl SerialBuffer {
     
+    /**
+     * Creates a new serial buffer and a connected stream
+     * Also starts the internal tokio tasks to relay data to and from the stream
+     */
     pub fn new() -> (Self, DuplexStream) {
         let (stream_a, stream_b) = tokio::io::duplex(1024*8);
 
@@ -51,6 +59,9 @@ impl SerialBuffer {
         );
     }
 
+    /**
+     * Reads data from the stream and sends it to the TX (Transmit buffer)
+     */
     async fn read_task(self) -> io::Result<()>{
         let mut reader = self.tx_pair.0.lock().await;
         let mut arr_buf = [0 as u8; 1024];
@@ -61,6 +72,10 @@ impl SerialBuffer {
         }
     }
 
+    /**
+     * Reads data from the RX buffer and sends it to the stream
+     * Requires a notification to check the RX buffer for new data.
+     */
     async fn write_task(self) -> io::Result<()> {
         let mut writer = self.tx_pair.1.lock().await;
         let mut arr_buf = [0 as u8; 1024];
@@ -82,14 +97,28 @@ impl SerialBuffer {
         }
     }
 
-    pub fn notify_tx(&self){
+    /**
+     * Notify the buffer that the rx_buffer has new data
+     * Required since the deque has no mechanism to async tasks about new data.
+     */
+    pub fn notify_rx(&self){
         self.notify.notify_waiters();
     }
 
+    /**
+     * Get the TX buffer containing the bytes that are queued for transmition.
+     * WARNING: Do not write to this buffer!
+     */
+    //TODO: Create a read only wrapper.
     pub fn get_tx_buffer(&self) -> SerialBufferVec {
         return self.tx_buffer.clone();
     }
 
+    /**
+     * Get the RX buffer containing the bytes that were received and queued for relaying to the stream.
+     * WARNING: Do not pop data from this buffer!
+     */
+    //TODO: Create a write only (and non destructive read only) wrapper.
     pub fn get_rx_buffer(&self) -> SerialBufferVec {
         return self.rx_buffer.clone();
     }
