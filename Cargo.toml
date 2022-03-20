@@ -5,3 +5,12 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dependencies]
+clap = { version = "3.1.6", features = ["derive"] }
+tokio = { version = "1.17.0", features = ["rt", "net", "macros", "sync", "time"]}
+usbip = { git = "https://github.com/voidfield101/usbip", branch = "custom"}
+env_logger = "0.9.0"
+log = "0.4.14"
+async-trait = "0.1.52"
+bytes = "1.1.0"
+tokio-util = "0.7.0"
