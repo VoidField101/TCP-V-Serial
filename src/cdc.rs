@@ -1,41 +1,47 @@
 // Copyright (c) 2022 voidfield101
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
-// 
-// Modified version of the 
+//
+// Modified version of the
 
-use std::{io, any::Any, sync::Arc};
 use bytes::Buf;
 use log::{debug, info};
-use tokio::{sync::Mutex, io::{BufReader, WriteHalf, DuplexStream, ReadHalf}};
+use std::{any::Any, io, sync::Arc};
+use tokio::{
+    io::{DuplexStream},
+    sync::Mutex, task::JoinHandle,
+};
 
 use async_trait::async_trait;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, AsyncRead};
-use usbip::{UsbEndpoint, EndpointAttributes, UsbInterfaceHandler, UsbInterface, SetupPacket, Direction};
+use usbip::{
+    Direction, EndpointAttributes, SetupPacket, UsbEndpoint, UsbInterface, UsbInterfaceHandler,
+};
 
-use crate::buffer::SerialBuffer;
-
+use crate::buffer::{SerialBuffer};
 
 #[derive(Clone)]
 pub struct UsbCdcAcmStreamHandler {
     buffer: SerialBuffer,
-    stream: Arc<Mutex<DuplexStream>>
+    stream: Arc<Mutex<DuplexStream>>,
 }
 
-pub const CDC_ACM_SUBCLASS: u8 = 0x02;
 
 impl UsbCdcAcmStreamHandler {
     /**
      * Create new UsbCdcAcmStreamHandler
      */
-    pub fn new() -> io::Result<Self> {
+    pub fn new() -> Self {
         let (buffer, stream) = SerialBuffer::new();
 
-        return Ok(Self{
+        return Self {
             buffer: buffer,
-            stream: Arc::new(Mutex::new(stream))
-        });
+            stream: Arc::new(Mutex::new(stream)),
+        };
+    }
+
+    pub fn start_buffer(&self) -> (JoinHandle<io::Result<()>>, JoinHandle<io::Result<()>>) {
+        self.buffer.start_tasks()
     }
 
     /**
@@ -45,7 +51,7 @@ impl UsbCdcAcmStreamHandler {
         return self.stream.clone();
     }
 
-
+    #[allow(unused)]
     pub fn endpoints() -> Vec<UsbEndpoint> {
         vec![
             // state notification
@@ -133,13 +139,3 @@ impl UsbInterfaceHandler for UsbCdcAcmStreamHandler {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn desc_verify() {
-        let handler = UsbCdcAcmHandler::new();
-        verify_descriptor(&handler.get_class_specific_descriptor());
-    }
-}

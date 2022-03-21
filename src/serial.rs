@@ -6,10 +6,10 @@
 use std::{sync::Arc, net::SocketAddr, io, fmt::Error, time::Duration};
 
 use log::info;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpStream};
 use usbip::{UsbDevice, ClassCode, cdc::{CDC_ACM_SUBCLASS, UsbCdcAcmHandler}, UsbInterfaceHandler, UsbIpServer};
 
-use crate::cdc;
+use crate::{cdc, relay::{StreamPluginRelay, start_relay}};
 
 pub type UsbHandlerBox = Arc<tokio::sync::Mutex<Box<dyn UsbInterfaceHandler + Send>>>;
 
@@ -18,7 +18,7 @@ pub type UsbHandlerBox = Arc<tokio::sync::Mutex<Box<dyn UsbInterfaceHandler + Se
  * Returns both the device and the handler (handler required for reading and writing)
  */
 pub async fn new_device(index:u32) -> io::Result<(UsbDevice, UsbHandlerBox)> {
-    let handler = Arc::new(tokio::sync::Mutex::new(Box::new(cdc::UsbCdcAcmStreamHandler::new()?) as Box<dyn usbip::UsbInterfaceHandler + Send>));
+    let handler = Arc::new(tokio::sync::Mutex::new(Box::new(cdc::UsbCdcAcmStreamHandler::new()) as Box<dyn usbip::UsbInterfaceHandler + Send>));
     
     let mut device = UsbDevice::new(index).with_interface(
         ClassCode::CDC as u8, 
@@ -38,22 +38,32 @@ pub async fn new_device(index:u32) -> io::Result<(UsbDevice, UsbHandlerBox)> {
  * Runs the UsbIp server and starts relaying information between the tcp socket and usb handler.
  * UsbHandlerBox needs to contain a UsbCdcAcmStreamHandler, task will panic otherwise
  */
-pub async fn run_usbip(device: (UsbDevice, UsbHandlerBox), addr: SocketAddr) -> io::Result<()>{
+pub async fn run_usbip(device: (UsbDevice, UsbHandlerBox), addr: SocketAddr, tcpstream: StreamPluginRelay<TcpStream>) -> io::Result<()>{
     //Might extend to multiple devices later
     let server = UsbIpServer::new_simulated(vec![device.0]);
 
     let mut stream;
+    let acm_handler;
     
     if let Some(acm) = device.1.lock().await.as_any().downcast_mut::<cdc::UsbCdcAcmStreamHandler>() {
         stream = acm.get_stream();
+        acm_handler = acm.start_buffer();
     }
     else {
+        //TODO: Make this an error instead of a panic
         panic!("Cast failed");
     }
 
 
     tokio::spawn(usbip::server(addr, server));
-    loop {
+
+    let mut rx = stream.lock().await;
+    start_relay(tcpstream, &mut *rx).await?;
+
+    Ok(())
+    
+
+    /*loop {
         let mut rx = stream.lock().await;
         let mut str = String::new();
         let mut buffer = [0 as u8;1024];
@@ -61,10 +71,10 @@ pub async fn run_usbip(device: (UsbDevice, UsbHandlerBox), addr: SocketAddr) -> 
         if read > 0 {
             info!("[R] {}",  String::from_utf8_lossy(&buffer[..read]));
         }
-        /*tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
         let mut tx = stream.lock().await;
-        tx.write_all("HI\n".as_bytes()).await?;*/
-    }
+        tx.write_all("HI\n".as_bytes()).await?;
+    }*/
 }
 
 

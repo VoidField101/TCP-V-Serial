@@ -1,34 +1,48 @@
 
-use std::{net::{SocketAddr, SocketAddrV4, Ipv4Addr}, io};
+use std::{net::{SocketAddr, SocketAddrV4, Ipv4Addr, TcpStream}, io};
 use args::Args;
 use log::info;
-use tcp::OptionalStream;
 use clap::Parser;
-use tokio::net::TcpListener;
+use tokio::{net::{TcpListener, TcpSocket}, io::DuplexStream};
 
 mod serial;
 mod args;
-mod tcp;
+mod relay;
 mod cdc;
 mod buffer;
 
 
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> io::Result<()> {
+async fn main() -> io::Result<()> { //TODO: Return a regular Result with the Error trait. (Currently no custom errors are allowed)
     env_logger::init();
     let args = Args::parse();
 
-    let stream = tcp::OptionalStreamType::new_optstream();
+    let mut stream = relay::StreamPluginRelay::new();
+    let stream2 = stream.clone();
 
     if args.listen {
         let server = TcpListener::bind(args.address).await?;
         info!("Binding server to {}", args.address.to_string());
-        tokio::spawn(tcp::run_serverloop(server, stream));
+        tokio::spawn(relay::run_serverloop(server, stream));
+    }
+    else {
+        let tcp_socket;
+        if let SocketAddr::V4(_) = args.address {
+            tcp_socket = TcpSocket::new_v4()?;
+        }
+        else if let SocketAddr::V6(_) = args.address {
+            tcp_socket = TcpSocket::new_v6()?;
+        }
+        else {
+            return Err(io::Error::from(io::ErrorKind::InvalidInput));
+        }
+        stream.set_stream(Some(tcp_socket.connect(args.address).await?)).await;
+        info!("Connected to: {}", args.address.to_string());
     }
 
     let device = serial::new_device(0).await?;
-    serial::run_usbip(device, SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), args.port))).await?;
+    serial::run_usbip(device, SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), args.port)), stream2).await?;
 
     Ok(())
 }   

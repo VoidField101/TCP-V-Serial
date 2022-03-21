@@ -6,9 +6,8 @@
 
 use std::{sync::Arc, io, collections::VecDeque};
 
-use log::info;
-use tokio::{io::{WriteHalf, ReadHalf, DuplexStream, AsyncWriteExt, AsyncReadExt}, sync::{Mutex, Notify}};
-use bytes::{Buf, BytesMut};
+use tokio::{io::{WriteHalf, ReadHalf, DuplexStream, AsyncWriteExt, AsyncReadExt}, sync::{Mutex, Notify}, task::JoinHandle};
+use bytes::Buf;
 
 pub type SerialWrite = Arc<Mutex<WriteHalf<DuplexStream>>>;
 pub type SerialRead = Arc<Mutex<ReadHalf<DuplexStream>>>;
@@ -50,13 +49,17 @@ impl SerialBuffer {
             notify: Arc::new(Notify::new())
         };
 
-        tokio::spawn(nb.clone().read_task());
-        tokio::spawn(nb.clone().write_task());
-
         return ( 
             nb,
             stream_b
         );
+    }
+
+    pub fn start_tasks(&self) -> (JoinHandle<io::Result<()>>, JoinHandle<io::Result<()>>) {
+        (
+            tokio::spawn(self.clone().read_task()),
+            tokio::spawn(self.clone().write_task()) 
+        )
     }
 
     /**
