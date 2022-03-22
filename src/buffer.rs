@@ -110,7 +110,7 @@ impl SerialBuffer {
     }
 
     /**
-     * Get the TX buffer containing the bytes that are queued for transmition.
+     * Get the TX buffer containing the bytes that are queued for transmission.
      * WARNING: Do not write to this buffer!
      */
     //TODO: Create a read only wrapper.

@@ -60,21 +60,7 @@ pub async fn run_usbip(device: (UsbDevice, UsbHandlerBox), addr: SocketAddr, tcp
     let mut rx = stream.lock().await;
     start_relay(tcpstream, &mut *rx).await?;
 
-    Ok(())
-    
-
-    /*loop {
-        let mut rx = stream.lock().await;
-        let mut str = String::new();
-        let mut buffer = [0 as u8;1024];
-        let read = rx.read(&mut buffer).await?;
-        if read > 0 {
-            info!("[R] {}",  String::from_utf8_lossy(&buffer[..read]));
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let mut tx = stream.lock().await;
-        tx.write_all("HI\n".as_bytes()).await?;
-    }*/
+    Ok(())   
 }
 
 
