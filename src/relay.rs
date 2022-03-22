@@ -3,10 +3,70 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, pin::Pin, task::Poll};
 
 use log::{info, debug};
 use tokio::{net::{TcpListener, TcpStream}, sync::{Mutex, Notify, RwLock}, io::{copy_bidirectional, AsyncRead, AsyncWrite}};
+
+
+pub struct StopOnceStream<'a, S> {
+    stream: &'a mut S,
+    eof: bool
+}
+
+impl <'a, S> StopOnceStream<'a, S> {
+
+    pub fn new(stream: &'a mut S) -> Self {
+        Self {
+            stream: stream,
+            eof: false
+        }
+    }
+
+}
+
+impl <S> AsyncRead for StopOnceStream<'_, S> 
+    where S: AsyncRead + Send + Sync + Unpin
+{
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        
+        if self.eof {
+            return Poll::Ready(Result::Ok(()));
+        }
+
+        let pin_stream = Pin::new(&mut *self.stream);
+        return pin_stream.poll_read(cx, buf);
+    }
+}
+
+impl <S> AsyncWrite for StopOnceStream<'_, S> 
+    where S: AsyncWrite + Send + Sync + Unpin
+{
+
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, io::Error>> {
+        Pin::new(&mut *self.stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), io::Error>> {
+        Pin::new(&mut *self.stream).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), io::Error>> {
+        self.eof = true;
+        Poll::Ready(Result::Ok(()))
+    }
+}
+
+
+
 
 pub struct StreamPluginRelay<S>
     where S: AsyncRead + AsyncWrite + Send + Unpin
@@ -17,7 +77,7 @@ pub struct StreamPluginRelay<S>
 }
 
 impl <S> Clone for StreamPluginRelay<S>
-    where S: AsyncRead + AsyncWrite + Send + Unpin
+    where S: AsyncRead + AsyncWrite + Send + Sync + Unpin
     
 {
     
@@ -71,8 +131,8 @@ impl <S> StreamPluginRelay<S>
 }
 
 pub async fn start_relay<OS,S>(optstream: StreamPluginRelay<OS>, stream: &mut S) -> io::Result<()>
-    where S: AsyncRead + AsyncWrite + Send + Unpin,
-          OS: AsyncRead + AsyncWrite + Send + Unpin
+    where S: AsyncRead + AsyncWrite + Send + Sync + Unpin,
+          OS: AsyncRead + AsyncWrite + Send + Sync + Unpin
 {
     loop {
         {
@@ -80,7 +140,7 @@ pub async fn start_relay<OS,S>(optstream: StreamPluginRelay<OS>, stream: &mut S)
             let mut optstream_guard = optstream_rc.lock().await;
             if let Some(stream_other) = &mut *optstream_guard {
                 debug!("Start copying");
-                let result = copy_bidirectional( stream_other,  stream).await;
+                let result = copy_bidirectional( stream_other,  &mut StopOnceStream::new(stream)).await;
                 debug!("Copy stopped {:?}", result);
             }
             optstream.reset_stream().await;

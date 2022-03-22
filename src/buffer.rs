@@ -26,6 +26,7 @@ pub struct SerialBuffer {
     notify: Arc<Notify>
 }
 
+//TODO: There is probably a better way to write this. Likely by creating custom AsyncRead/AsyncWrite implementations
 impl SerialBuffer {
     
     /**
