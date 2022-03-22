@@ -1,13 +1,16 @@
 // Copyright (c) 2022 voidfield101
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
+use std::{collections::VecDeque, io, sync::Arc};
 
-use std::{sync::Arc, io, collections::VecDeque};
-
-use tokio::{io::{WriteHalf, ReadHalf, DuplexStream, AsyncWriteExt, AsyncReadExt}, sync::{Mutex, Notify}, task::JoinHandle};
 use bytes::Buf;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt, DuplexStream, ReadHalf, WriteHalf},
+    sync::{Mutex, Notify},
+    task::JoinHandle,
+};
 
 pub type SerialWrite = Arc<Mutex<WriteHalf<DuplexStream>>>;
 pub type SerialRead = Arc<Mutex<ReadHalf<DuplexStream>>>;
@@ -23,18 +26,17 @@ pub struct SerialBuffer {
     tx_pair: (SerialRead, SerialWrite),
     tx_buffer: SerialBufferVec,
     rx_buffer: SerialBufferVec,
-    notify: Arc<Notify>
+    notify: Arc<Notify>,
 }
 
 //TODO: There is probably a better way to write this. Likely by creating custom AsyncRead/AsyncWrite implementations
 impl SerialBuffer {
-    
     /**
      * Creates a new serial buffer and a connected stream
      * Also starts the internal tokio tasks to relay data to and from the stream
      */
     pub fn new() -> (Self, DuplexStream) {
-        let (stream_a, stream_b) = tokio::io::duplex(1024*8);
+        let (stream_a, stream_b) = tokio::io::duplex(1024 * 8);
 
         let splits = tokio::io::split(stream_a);
 
@@ -43,30 +45,27 @@ impl SerialBuffer {
             Arc::new(Mutex::new(splits.1)),
         );
 
-        let nb = Self{
+        let nb = Self {
             tx_pair: tx_rcpair,
             tx_buffer: Arc::new(Mutex::new(VecDeque::new())),
             rx_buffer: Arc::new(Mutex::new(VecDeque::new())),
-            notify: Arc::new(Notify::new())
+            notify: Arc::new(Notify::new()),
         };
 
-        return ( 
-            nb,
-            stream_b
-        );
+        return (nb, stream_b);
     }
 
     pub fn start_tasks(&self) -> (JoinHandle<io::Result<()>>, JoinHandle<io::Result<()>>) {
         (
             tokio::spawn(self.clone().read_task()),
-            tokio::spawn(self.clone().write_task()) 
+            tokio::spawn(self.clone().write_task()),
         )
     }
 
     /**
      * Reads data from the stream and sends it to the TX (Transmit buffer)
      */
-    async fn read_task(self) -> io::Result<()>{
+    async fn read_task(self) -> io::Result<()> {
         let mut reader = self.tx_pair.0.lock().await;
         let mut arr_buf = [0 as u8; 1024];
         loop {
@@ -105,7 +104,7 @@ impl SerialBuffer {
      * Notify the buffer that the rx_buffer has new data
      * Required since the deque has no mechanism to async tasks about new data.
      */
-    pub fn notify_rx(&self){
+    pub fn notify_rx(&self) {
         self.notify.notify_waiters();
     }
 
@@ -126,5 +125,4 @@ impl SerialBuffer {
     pub fn get_rx_buffer(&self) -> SerialBufferVec {
         return self.rx_buffer.clone();
     }
-
 }

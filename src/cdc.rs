@@ -6,26 +6,22 @@
 // Modified version of the
 
 use bytes::Buf;
-use log::{debug, info};
+
 use std::{any::Any, io, sync::Arc};
-use tokio::{
-    io::{DuplexStream},
-    sync::Mutex, task::JoinHandle,
-};
+use tokio::{io::DuplexStream, sync::Mutex, task::JoinHandle};
 
 use async_trait::async_trait;
 use usbip::{
     Direction, EndpointAttributes, SetupPacket, UsbEndpoint, UsbInterface, UsbInterfaceHandler,
 };
 
-use crate::buffer::{SerialBuffer};
+use crate::buffer::SerialBuffer;
 
 #[derive(Clone)]
 pub struct UsbCdcAcmStreamHandler {
     buffer: SerialBuffer,
     stream: Arc<Mutex<DuplexStream>>,
 }
-
 
 impl UsbCdcAcmStreamHandler {
     /**
@@ -138,4 +134,3 @@ impl UsbInterfaceHandler for UsbCdcAcmStreamHandler {
         self
     }
 }
-
